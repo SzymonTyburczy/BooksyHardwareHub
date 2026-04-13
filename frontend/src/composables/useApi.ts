@@ -96,6 +96,8 @@ export const usersApi = {
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 export const aiApi = {
+  status: () => request<{ gemini_available: boolean }>('/api/ai/status'),
+
   search: (query: string) =>
     request<Hardware[]>('/api/ai/search', {
       method: 'POST',

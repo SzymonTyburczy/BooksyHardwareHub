@@ -406,53 +406,25 @@ def delete_user(user_id: int, admin: dict = Depends(require_admin)):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  AI ENDPOINTS (Mock)
+#  AI ENDPOINTS (Gemini-powered with keyword fallback)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-KEYWORD_MAP = {
-    "mobile": ["iphone", "galaxy", "ipad", "samsung", "apple"],
-    "phone": ["iphone", "galaxy", "samsung", "sony"],
-    "laptop": ["macbook", "xps", "dell", "lenovo"],
-    "mouse": ["basilisk", "mx master", "logitech", "razer"],
-    "headphone": ["sony", "wh-1000", "headphones"],
-    "audio": ["sony", "wh-1000"],
-    "test": ["iphone", "galaxy", "ipad", "samsung"],
-    "develop": ["macbook", "xps", "laptop"],
-    "meeting": ["headphone", "sony"],
-    "portable": ["iphone", "galaxy", "ipad", "macbook air"],
-    "apple": ["apple", "iphone", "ipad", "macbook"],
-    "keyboard": ["razer", "logitech"],
-    "wireless": ["logitech", "sony", "apple"],
-}
+from ai_service import semantic_search, inventory_audit, is_gemini_available
+
+
+@app.get("/api/ai/status")
+def ai_status(user: dict = Depends(get_current_user)):
+    """Check if Gemini AI is configured and available."""
+    return {"gemini_available": is_gemini_available()}
 
 
 @app.post("/api/ai/search")
 def ai_search(body: SearchRequest, user: dict = Depends(get_current_user)):
-    q = body.query.lower()
-
     with get_db_connection() as conn:
         all_items = conn.execute("SELECT * FROM hardware ORDER BY name").fetchall()
 
     items = [dict(r) for r in all_items]
-
-    # Find matching keywords
-    matched_terms: list[str] = []
-    for keyword, terms in KEYWORD_MAP.items():
-        if keyword in q:
-            matched_terms.extend(terms)
-
-    if matched_terms:
-        results = [
-            h for h in items
-            if any(t in f"{h['name']} {h['brand']}".lower() for t in matched_terms)
-        ]
-    else:
-        # Fallback to text search
-        results = [
-            h for h in items
-            if q in h["name"].lower() or q in h["brand"].lower()
-        ]
-
+    results = semantic_search(body.query, items)
     return [format_hardware(h) for h in results]
 
 
@@ -462,73 +434,5 @@ def ai_audit(user: dict = Depends(get_current_user)):
         all_items = conn.execute("SELECT * FROM hardware").fetchall()
 
     items = [dict(r) for r in all_items]
-    flags = []
+    return inventory_audit(items)
 
-    for item in items:
-        # Check future purchase dates
-        if item["purchase_date"]:
-            try:
-                pd = datetime.strptime(item["purchase_date"], "%Y-%m-%d")
-                if pd > datetime.now():
-                    flags.append({
-                        "hardware_id": item["id"],
-                        "hardware_name": item["name"],
-                        "issue": f"Purchase date is in the future ({item['purchase_date']}). This may be a data entry error.",
-                        "severity": "high",
-                    })
-            except ValueError:
-                pass
-
-        # Check for safety notes
-        notes = (item["notes"] or "").lower()
-        if "battery swelling" in notes or "battery swell" in notes:
-            flags.append({
-                "hardware_id": item["id"],
-                "hardware_name": item["name"],
-                "issue": f"Notes indicate battery swelling — a safety hazard. Device is marked {item['status']} but should be in Repair.",
-                "severity": "high",
-            })
-        elif "liquid damage" in notes or "water damage" in notes:
-            flags.append({
-                "hardware_id": item["id"],
-                "hardware_name": item["name"],
-                "issue": f"Notes indicate liquid damage and sticky keyboard. Device is {item['status']} but may need servicing.",
-                "severity": "medium",
-            })
-
-        # Check unknown status
-        if item["status"] == "Unknown":
-            flags.append({
-                "hardware_id": item["id"],
-                "hardware_name": item["name"],
-                "issue": 'Status is "Unknown" — device has no brand or purchase date. Needs identification.',
-                "severity": "medium",
-            })
-
-        # Check long-standing Repair status
-        if item["status"] == "Repair" and item["purchase_date"]:
-            try:
-                pd = datetime.strptime(item["purchase_date"], "%Y-%m-%d")
-                years = (datetime.now() - pd).days / 365
-                if years > 2:
-                    flags.append({
-                        "hardware_id": item["id"],
-                        "hardware_name": item["name"],
-                        "issue": f"Device has been in Repair status since {pd.year}. Consider escalating or writing off.",
-                        "severity": "low",
-                    })
-            except ValueError:
-                pass
-
-    high = sum(1 for f in flags if f["severity"] == "high")
-    medium = sum(1 for f in flags if f["severity"] == "medium")
-    low = sum(1 for f in flags if f["severity"] == "low")
-
-    summary = (
-        f"Inventory audit complete. Found {len(flags)} issues: "
-        f"{high} high-severity (safety risk + data anomaly), "
-        f"{medium} medium-severity, {low} low-severity. "
-        f"Immediate action recommended for flagged items."
-    )
-
-    return {"flags": flags, "summary": summary}

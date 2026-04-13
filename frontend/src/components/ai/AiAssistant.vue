@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import type { Hardware } from '@/types'
 import { aiApi } from '@/composables/useApi'
 import {
@@ -12,6 +12,19 @@ import HardwareStatusBadge from '@/components/hardware/HardwareStatusBadge.vue'
 const props = defineProps<{ hardware: Hardware[] }>()
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
+const geminiAvailable = ref(false)
+
+// Check Gemini status on mount
+onMounted(async () => {
+  if (!USE_MOCK) {
+    try {
+      const status = await aiApi.status()
+      geminiAvailable.value = status.gemini_available
+    } catch {
+      geminiAvailable.value = false
+    }
+  }
+})
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 type Tab = 'search' | 'audit'
@@ -91,8 +104,12 @@ const severityConfig = {
       </div>
       <div class="flex-1">
         <h2 class="text-sm font-bold text-[#1e293b]">AI Assistant</h2>
-        <p class="text-[11px] text-[#94a3b8]">
-          {{ USE_MOCK ? 'Mock analysis' : 'Connected to backend' }}
+        <p class="text-[11px] text-[#94a3b8] flex items-center gap-1.5">
+          <span
+            class="h-1.5 w-1.5 rounded-full"
+            :class="USE_MOCK ? 'bg-[#94a3b8]' : geminiAvailable ? 'bg-[#22c55e]' : 'bg-[#f59e0b]'"
+          />
+          {{ USE_MOCK ? 'Mock mode' : geminiAvailable ? 'Gemini AI connected' : 'Keyword fallback' }}
         </p>
       </div>
     </div>
