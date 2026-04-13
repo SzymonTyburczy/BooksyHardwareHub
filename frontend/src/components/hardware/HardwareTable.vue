@@ -228,7 +228,7 @@ const canReturn = (item: Hardware) =>
                   <div class="flex items-center gap-2">
                     <div class="h-6 w-6 rounded-full bg-[#eef2ff] flex items-center justify-center flex-shrink-0">
                       <span class="text-[10px] font-bold text-[#6366f1]">
-                        {{ getUserName(item.assigned_to)![0].toUpperCase() }}
+                        {{ getUserName(item.assigned_to)?.[0]?.toUpperCase() ?? '?' }}
                       </span>
                     </div>
                     <span class="text-sm text-[#1e293b] font-medium">{{ getUserName(item.assigned_to) }}</span>
