@@ -13,17 +13,22 @@ logger = logging.getLogger(__name__)
 
 # ── Gemini client ────────────────────────────────────────────────────────────
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 _gemini_client = None
+
+
+def _get_api_key() -> str:
+    """Read the API key at call time (after dotenv has loaded)."""
+    return os.getenv("GEMINI_API_KEY", "")
 
 
 def _get_gemini_client():
     """Lazy-initialize the Gemini client."""
     global _gemini_client
-    if _gemini_client is None and GEMINI_API_KEY:
+    api_key = _get_api_key()
+    if _gemini_client is None and api_key:
         try:
             from google import genai
-            _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+            _gemini_client = genai.Client(api_key=api_key)
             logger.info("Gemini client initialized successfully")
         except Exception as e:
             logger.warning(f"Failed to initialize Gemini client: {e}")
@@ -31,7 +36,7 @@ def _get_gemini_client():
 
 
 def is_gemini_available() -> bool:
-    return bool(GEMINI_API_KEY)
+    return bool(_get_api_key())
 
 
 # ── Keyword fallback (used when Gemini is unavailable) ─────────────────────

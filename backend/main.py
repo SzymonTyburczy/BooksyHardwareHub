@@ -3,6 +3,9 @@ Hardware Hub — FastAPI Backend
 All endpoints match the frontend API contract exactly.
 """
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before anything reads os.getenv()
+
 import os
 import re
 import jwt
