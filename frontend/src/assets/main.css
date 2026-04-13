@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/* ── Base layer (extends Preflight) ─────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body, #app {
+    height: 100%;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #f8f9fb;
+    color: #1e293b;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+  *:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+
+  /* Override Preflight button reset */
+  button, [type="button"], [type="submit"] {
+    appearance: none;
+  }
+}
+
+/* ── Components layer (beats base/Preflight) ────────────────────────────────── */
+@layer components {
+  /* Transitions */
+  .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+  .fade-enter-from, .fade-leave-to { opacity: 0; }
+  .slide-up-enter-active, .slide-up-leave-active { transition: all 0.25s cubic-bezier(0.4,0,0.2,1); }
+  .slide-up-enter-from, .slide-up-leave-to { opacity: 0; transform: translateY(12px); }
+  .modal-enter-active, .modal-leave-active { transition: all 0.2s cubic-bezier(0.4,0,0.2,1); }
+  .modal-enter-from, .modal-leave-to { opacity: 0; transform: scale(0.96); }
+
+  /* Card */
+  .card {
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+  }
+
+  /* Input */
+  .input-base {
+    display: block;
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background-color: #ffffff;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #1e293b;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input-base::placeholder { color: #9ca3af; }
+  .input-base:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.08); }
+  .input-base.has-error { border-color: #ef4444; }
+  select.input-base { cursor: pointer; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    background-color: transparent;
+    color: inherit;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-primary {
+    background-color: #1e293b;
+    color: #ffffff;
+    border-color: #1e293b;
+  }
+  .btn-primary:hover:not(:disabled) { background-color: #0f172a; border-color: #0f172a; }
+
+  .btn-secondary {
+    background-color: #ffffff;
+    border-color: #d1d5db;
+    color: #374151;
+  }
+  .btn-secondary:hover:not(:disabled) { background-color: #f9fafb; }
+
+  .btn-danger {
+    background-color: #fee2e2;
+    color: #dc2626;
+    border-color: #fecaca;
+  }
+  .btn-danger:hover:not(:disabled) { background-color: #fecaca; }
+
+  .btn-sm { padding: 6px 14px; font-size: 13px; border-radius: 8px; }
+}
