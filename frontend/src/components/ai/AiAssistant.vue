@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Hardware } from '@/types'
+import { aiApi } from '@/composables/useApi'
 import {
   MOCK_AUDIT_FLAGS,
   MOCK_AUDIT_SUMMARY,
@@ -11,7 +12,6 @@ import HardwareStatusBadge from '@/components/hardware/HardwareStatusBadge.vue'
 const props = defineProps<{ hardware: Hardware[] }>()
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
-const HAS_GEMINI = !!import.meta.env.VITE_GEMINI_API_KEY
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 type Tab = 'search' | 'audit'
@@ -19,17 +19,27 @@ const activeTab = ref<Tab>('audit')
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
 const auditLoading = ref(false)
-const auditDone = ref(USE_MOCK)
-const auditFlags = ref(USE_MOCK ? MOCK_AUDIT_FLAGS : [])
-const auditSummary = ref(USE_MOCK ? MOCK_AUDIT_SUMMARY : '')
+const auditDone = ref(false)
+const auditFlags = ref<{ hardware_id: number; hardware_name: string; issue: string; severity: 'high' | 'medium' | 'low' }[]>([])
+const auditSummary = ref('')
 
 async function runAudit() {
   auditLoading.value = true
   auditDone.value = false
   try {
-    await new Promise((r) => setTimeout(r, 1200))
-    auditFlags.value = MOCK_AUDIT_FLAGS
-    auditSummary.value = MOCK_AUDIT_SUMMARY
+    if (USE_MOCK) {
+      await new Promise((r) => setTimeout(r, 1200))
+      auditFlags.value = MOCK_AUDIT_FLAGS
+      auditSummary.value = MOCK_AUDIT_SUMMARY
+    } else {
+      const data = await aiApi.audit()
+      auditFlags.value = data.flags as typeof auditFlags.value
+      auditSummary.value = data.summary
+    }
+    auditDone.value = true
+  } catch (err) {
+    console.error('Audit failed:', err)
+    auditSummary.value = 'Audit failed. Please try again.'
     auditDone.value = true
   } finally {
     auditLoading.value = false
@@ -47,8 +57,16 @@ async function runSearch() {
   searchLoading.value = true
   searchDone.value = false
   try {
-    await new Promise((r) => setTimeout(r, 800))
-    searchResults.value = mockSemanticSearch(searchQuery.value, props.hardware)
+    if (USE_MOCK) {
+      await new Promise((r) => setTimeout(r, 800))
+      searchResults.value = mockSemanticSearch(searchQuery.value, props.hardware)
+    } else {
+      searchResults.value = await aiApi.search(searchQuery.value)
+    }
+    searchDone.value = true
+  } catch (err) {
+    console.error('Search failed:', err)
+    searchResults.value = []
     searchDone.value = true
   } finally {
     searchLoading.value = false
@@ -74,7 +92,7 @@ const severityConfig = {
       <div class="flex-1">
         <h2 class="text-sm font-bold text-[#1e293b]">AI Assistant</h2>
         <p class="text-[11px] text-[#94a3b8]">
-          {{ USE_MOCK ? 'Mock analysis' : HAS_GEMINI ? 'Gemini' : 'Offline' }}
+          {{ USE_MOCK ? 'Mock analysis' : 'Connected to backend' }}
         </p>
       </div>
     </div>
