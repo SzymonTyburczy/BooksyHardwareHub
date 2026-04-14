@@ -77,7 +77,7 @@ All **21 tests** should pass.
 | **Smart Dashboard**         | Hardware list with Name, Brand, Purchase Date, Status, Notes. Full sorting (4 columns) and filtering (status, brand, text search) |
 | **Rent/Return Flow**        | Users can rent Available equipment and return In Use items |
 | **Business Logic Guards**   | Cannot rent Repair / In Use / Unknown items. Cannot return non-rented items. Primary admin cannot be deleted |
-| **Semantic Search (AI)**    | Gemini 2.0 Flash interprets natural language queries (e.g., "I need something for mobile testing" → returns phones/tablets) |
+| **Semantic Search (AI)**    | Gemini 2.5 Flash interprets natural language queries (e.g., "I need something for mobile testing" → returns phones/tablets) |
 | **Inventory Auditor (AI)**  | Gemini analyzes full inventory for safety hazards, data anomalies, and operational issues |
 | **AI Graceful Degradation** | Keyword-based search and rule-based audit as fallback when Gemini API is unavailable |
 | **Test Suite**              | 21 critical tests: auth (4), rental guards (7), admin ops (7), AI endpoints (3) |
@@ -92,6 +92,7 @@ All **21 tests** should pass.
 | **JWT without server-side blacklist** | Logout is client-side (remove token). 24h expiry limits exposure | Redis-backed token blacklist, refresh token rotation |
 | **`@app.on_event("startup")`** | Works fine but deprecated in FastAPI 0.93+. Used for simplicity | Migrate to `lifespan` context manager |
 | **No rate limiting** | Internal tool with limited users | Add `slowapi` rate limiter for auth and AI endpoints |
+| **401 auto-redirect** | Added after production testing revealed expired tokens left users on broken pages | Already implemented in `useApi.ts` — listed here as a post-MVP hardening step |
 
 ### ⚠️ Partial/Missing
 
@@ -129,7 +130,7 @@ The provided wireframes were used as a **functional reference**, not a visual te
 | Tool | Usage |
 |------|-------|
 | **Gemini (Antigravity)** | Primary AI pair programmer — architecture design, API implementation, test generation, debugging |
-| **Gemini 2.0 Flash API** | Integrated into the app for semantic search and inventory auditing |
+| **Gemini 2.5 Flash API** | Integrated into the app for semantic search and inventory auditing |
 | **VS Code** | IDE with Vue/Python extensions |
 
 ### Data Strategy
@@ -166,7 +167,7 @@ Outcome: Full `main.py` + `sqlite_db.py` in one session. I reviewed every endpoi
 Outcome: 21 tests. First AI attempt used `:memory:` — see **The Correction** below.
 
 **Phase 4 — AI Integration**
-> *"Integrate Gemini 2.0 Flash into the backend. Implement semantic_search() that interprets natural language hardware queries, and inventory_audit() that flags safety issues, data anomalies, and operational problems. Add keyword-based fallback for when the API key is missing."*
+> *"Integrate Gemini 2.5 Flash into the backend. Implement semantic_search() that interprets natural language hardware queries, and inventory_audit() that flags safety issues, data anomalies, and operational problems. Add keyword-based fallback for when the API key is missing."*
 
 Outcome: `ai_service.py` with lazy initialization, structured prompts, JSON response parsing, and graceful degradation.
 
