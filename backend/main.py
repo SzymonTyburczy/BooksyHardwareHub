@@ -58,6 +58,32 @@ app.add_middleware(
 def startup():
     initialize_database()
     logger.info("Database initialized")
+    _ensure_default_users()
+
+
+def _ensure_default_users():
+    """Ensure default users exist (idempotent — safe to call on every boot)."""
+    defaults = [
+        {"username": "admin",   "password": "admin123",    "is_admin": 1},
+        {"username": "j.doe",   "password": "password123", "is_admin": 0},
+        {"username": "a.smith", "password": "password123", "is_admin": 0},
+    ]
+    with get_db_connection() as conn:
+        for u in defaults:
+            existing = conn.execute(
+                "SELECT id FROM users WHERE username = ?", (u["username"],)
+            ).fetchone()
+            if not existing:
+                pw_hash = _bcrypt.hashpw(u["password"].encode(), _bcrypt.gensalt()).decode()
+                conn.execute(
+                    "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)",
+                    (u["username"], pw_hash, u["is_admin"]),
+                )
+                logger.info(f"Created default user: {u['username']}")
+            else:
+                logger.info(f"User already exists: {u['username']}")
+        conn.commit()
+
 
 
 # ── Pydantic Models ─────────────────────────────────────────────────────────────
