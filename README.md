@@ -3,7 +3,8 @@
 An internal tool for Booksy employees to manage, rent, and maintain company equipment.  
 Built with **FastAPI** (Python) + **Vue 3** (TypeScript) + **SQLite** + **Gemini AI**.
 
-> **Live demo:** _[link will be added after deployment]_
+> **Live demo:** [https://booksy-hardware-hub.vercel.app](https://booksy-hardware-hub.vercel.app)  
+> **Backend API:** [https://booksyhardwarehub-production.up.railway.app](https://booksyhardwarehub-production.up.railway.app)
 
 ---
 
@@ -245,8 +246,12 @@ TestAIEndpoints (3)
 
 1. Push to GitHub
 2. Connect repo at [railway.app](https://railway.app)
-3. Add environment variables: `GEMINI_API_KEY`, `JWT_SECRET`
-4. Railway auto-detects `nixpacks.toml` and deploys
+3. Add a **Volume** mounted at `/data` (keeps SQLite data across redeploys)
+4. Add environment variables:
+   - `GEMINI_API_KEY` — from [aistudio.google.com](https://aistudio.google.com/apikey)
+   - `JWT_SECRET` — any random secret string
+   - `HARDWARE_HUB_DB_PATH` — `/data/hardware_hub.db`
+5. Railway auto-detects `nixpacks.toml` and deploys
 
 ### Frontend → Vercel
 
