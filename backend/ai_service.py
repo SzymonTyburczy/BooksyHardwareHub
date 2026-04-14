@@ -21,6 +21,10 @@ def _get_api_key() -> str:
     return os.getenv("GEMINI_API_KEY", "")
 
 
+# Model to use — update here if quota is exhausted on one model
+GEMINI_MODEL = "gemini-2.5-flash"  # or "gemini-3-flash-preview" for the latest preview
+
+
 def _get_gemini_client():
     """Lazy-initialize the Gemini client."""
     global _gemini_client
@@ -28,8 +32,10 @@ def _get_gemini_client():
     if _gemini_client is None and api_key:
         try:
             from google import genai
+            # SDK automatically reads GEMINI_API_KEY from env if api_key not provided,
+            # but we pass it explicitly so it's clear where the key comes from.
             _gemini_client = genai.Client(api_key=api_key)
-            logger.info("Gemini client initialized successfully")
+            logger.info(f"Gemini client initialized (model: {GEMINI_MODEL})")
         except Exception as e:
             logger.warning(f"Failed to initialize Gemini client: {e}")
     return _gemini_client
@@ -118,7 +124,7 @@ If nothing matches, respond with [].
 Do NOT include any explanation, just the JSON array."""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=GEMINI_MODEL,
             contents=prompt,
         )
 
@@ -223,7 +229,7 @@ def inventory_audit(items: list[dict]) -> dict:
     Use Gemini to perform an intelligent inventory audit.
     Falls back to rule-based checks if Gemini is unavailable.
     """
-    client = _get_gemini_client()
+    # client = _get_gemini_client()
     if not client:
         logger.info("Gemini unavailable, using rule-based fallback for audit")
         return _rule_based_audit(items)
@@ -268,7 +274,7 @@ Respond with ONLY valid JSON in this exact format:
 Be thorough but concise. Only flag genuine issues."""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=GEMINI_MODEL,
             contents=prompt,
         )
 
