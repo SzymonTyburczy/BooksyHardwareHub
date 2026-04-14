@@ -59,10 +59,11 @@ def startup():
     initialize_database()
     logger.info("Database initialized")
     _ensure_default_users()
+    _ensure_default_hardware()
 
 
 def _ensure_default_users():
-    """Ensure default users exist (idempotent — safe to call on every boot)."""
+    """Ensure default users exist (idempotent - safe to call on every boot)."""
     defaults = [
         {"username": "admin",   "password": "admin123",    "is_admin": 1},
         {"username": "j.doe",   "password": "password123", "is_admin": 0},
@@ -83,6 +84,73 @@ def _ensure_default_users():
             else:
                 logger.info(f"User already exists: {u['username']}")
         conn.commit()
+
+
+def _ensure_default_hardware():
+    """Seed hardware from seed.json if items don't exist yet (idempotent by id)."""
+    import json
+    from pathlib import Path
+
+    seed_path = Path(__file__).resolve().parent / "seed.json"
+    if not seed_path.exists():
+        logger.warning("seed.json not found, skipping hardware seed")
+        return
+
+    valid_statuses = {
+        "available": "Available",
+        "in use": "In Use",
+        "repair": "Repair",
+        "unknown": "Unknown",
+    }
+
+    try:
+        with open(seed_path, encoding="utf-8") as f:
+            items = json.load(f)
+
+        with get_db_connection() as conn:
+            rows = conn.execute("SELECT id, username FROM users").fetchall()
+            user_map = {r["username"]: r["id"] for r in rows}
+
+            seeded = 0
+            for item in items:
+                existing = conn.execute(
+                    "SELECT id FROM hardware WHERE id = ?", (item["id"],)
+                ).fetchone()
+                if existing:
+                    continue
+
+                status = valid_statuses.get(
+                    str(item.get("status", "Unknown")).lower(), "Unknown"
+                )
+
+                assigned_to = None
+                assigned_email = item.get("assignedTo", "")
+                if assigned_email:
+                    username = assigned_email.split("@")[0]
+                    assigned_to = user_map.get(username)
+
+                parts = [p for p in [item.get("notes"), item.get("history")] if p]
+                notes = ". ".join(parts) or None
+
+                conn.execute(
+                    "INSERT INTO hardware (id, name, brand, purchase_date, status, notes, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (item["id"], item["name"], item.get("brand", "Unknown"),
+                     item.get("purchaseDate"), status, notes, assigned_to),
+                )
+
+                if status == "In Use" and assigned_to:
+                    conn.execute(
+                        "INSERT INTO rentals (hardware_id, user_id) VALUES (?, ?)",
+                        (item["id"], assigned_to),
+                    )
+
+                seeded += 1
+
+            conn.commit()
+            logger.info(f"Seeded {seeded} hardware items from seed.json")
+
+    except Exception as e:
+        logger.error(f"Hardware seed failed: {e}")
 
 
 
