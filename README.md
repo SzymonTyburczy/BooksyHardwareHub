@@ -109,6 +109,19 @@ All **21 tests** should pass.
 
 ---
 
+## 🎨 UI Design Decisions (vs. Wireframes)
+
+The provided wireframes were used as a **functional reference**, not a visual template. Key deliberate deviations:
+
+| Wireframe | This Implementation | Justification |
+|-----------|--------------------|--------------| 
+| Basic table layout, no color system | Dark-accented cards, status color badges | Internal tools are used 8h/day — color-coded status (green/red/blue) enables instant scanning without reading text |
+| Single-column form for admin actions | Split Admin view: Hardware panel + Users panel | Admins manage both resources simultaneously — side-by-side reduces context switching |
+| Generic action buttons always visible | Contextual buttons (Rent only when Available, Return only when In Use) | Hides impossible actions rather than disabling them — cleaner UX, prevents user confusion |
+| No AI panel in wireframe | Collapsible AI Assistant panel in the dashboard | AI is a first-class feature of this spec — it needed dedicated, accessible UI, not buried in a menu |
+
+---
+
 ## 🤖 AI Development Log
 
 ### Tooling
@@ -135,12 +148,32 @@ The provided seed dataset contained **intentional traps** to test data auditing 
 
 ### Prompt Trail
 
-The full development conversation is available in the repository's commit history. Key architectural decisions shaped by AI collaboration:
+Key prompts that shaped the architecture (paraphrased from the actual Antigravity/Gemini session):
 
-1. **"Analyze the recruitment task and tell me what's missing"** — AI produced a comprehensive gap analysis comparing codebase vs requirements, identifying 4 critical blockers
-2. **"Write tests for the 3 most critical business rules"** — AI generated 21 tests covering auth, rental guards, admin ops. First attempt failed due to in-memory SQLite (each connection got a fresh DB) — fixed by using temp file
-3. **"Connect frontend AI assistant to backend instead of mocks"** — AI refactored `AiAssistant.vue` to call `/api/ai/search` and `/api/ai/audit`, keeping mock fallback
-4. **"Integrate Gemini for semantic search"** — AI created `ai_service.py` with lazy initialization, graceful degradation, and structured prompts
+**Phase 1 — Gap Analysis**
+> *"You are reviewing a recruitment task for an AI-native hardware management tool. I have a Vue 3 frontend with mock data and no backend. Analyze the requirements and tell me exactly what's missing to make it production-ready."*
+
+Outcome: AI identified 4 critical blockers — no backend, no auth, mock data only, no AI layer. Produced a prioritized implementation plan.
+
+**Phase 2 — Backend Architecture**
+> *"Build a FastAPI backend that exactly matches this frontend API contract. Use SQLite with bcrypt password hashing. Seed from this JSON. Implement JWT auth, hardware CRUD, rental business logic guards, and mock AI endpoints."*
+
+Outcome: Full `main.py` + `sqlite_db.py` in one session. I reviewed every endpoint against the frontend contract manually.
+
+**Phase 3 — Test Generation**
+> *"Write at least 21 pytest tests for the 3 most critical business rules: authentication, rental guards (cannot rent Repair/In Use/Unknown), and admin-only operations. Use a temp file SQLite DB, not :memory:."*
+
+Outcome: 21 tests. First AI attempt used `:memory:` — see **The Correction** below.
+
+**Phase 4 — AI Integration**
+> *"Integrate Gemini 2.0 Flash into the backend. Implement semantic_search() that interprets natural language hardware queries, and inventory_audit() that flags safety issues, data anomalies, and operational problems. Add keyword-based fallback for when the API key is missing."*
+
+Outcome: `ai_service.py` with lazy initialization, structured prompts, JSON response parsing, and graceful degradation.
+
+**Phase 5 — Deployment Fixes**
+> *"Frontend on Vercel gets 'failed to fetch'. Backend on Railway returns 502. Debug the issue."*
+
+Outcome: Identified 3 separate issues — wrong env var name (`VITE_API_URL` vs `VITE_API_BASE_URL`), CORS misconfiguration with hardcoded wrong domain, and Railway start command crashing silently. Fixed all three iteratively.
 
 ### The "Correction" ⚠️
 
