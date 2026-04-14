@@ -176,7 +176,7 @@ const canReturn = (item: Hardware) =>
             </th>
             <th v-if="adminMode" class="px-5 py-3 text-left text-xs font-semibold text-[#64748b] uppercase tracking-wider">Assigned To</th>
             <th class="px-5 py-3 text-left text-xs font-semibold text-[#64748b] uppercase tracking-wider">Notes</th>
-            <th class="px-5 py-3 text-right text-xs font-semibold text-[#64748b] uppercase tracking-wider">Actions</th>
+            <th class="px-5 py-3 text-center text-xs font-semibold text-[#64748b] uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -243,12 +243,12 @@ const canReturn = (item: Hardware) =>
                 <span v-else class="text-[#d1d5db]">—</span>
               </td>
               <td class="px-5 py-4">
-                <div class="flex items-center justify-end gap-2">
+                <div class="flex items-center justify-center gap-2">
                   <template v-if="!adminMode">
                     <button
                       v-if="canRent(item)"
                       :id="`rent-btn-${item.id}`"
-                      class="btn btn-sm btn-primary"
+                      class="btn btn-sm btn-primary min-w-[72px] justify-center"
                       @click="emit('rent', item)"
                     >
                       Rent
@@ -256,7 +256,7 @@ const canReturn = (item: Hardware) =>
                     <button
                       v-if="canReturn(item)"
                       :id="`return-btn-${item.id}`"
-                      class="btn btn-sm btn-secondary"
+                      class="btn btn-sm btn-secondary min-w-[72px] justify-center"
                       @click="emit('return', item)"
                     >
                       Return
