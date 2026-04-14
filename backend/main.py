@@ -33,9 +33,20 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Hardware Hub API", version="1.0.0")
 
+ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "")
+if ALLOWED_ORIGINS_ENV:
+    _origins = [o.strip() for o in ALLOWED_ORIGINS_ENV.split(",") if o.strip()]
+else:
+    # Default: allow localhost + all Vercel preview/production deployments
+    _origins = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "https://booksy-hardware-hub-twoja-nazwa.vercel.app"],
+    allow_origins=_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
