@@ -229,7 +229,7 @@ def inventory_audit(items: list[dict]) -> dict:
     Use Gemini to perform an intelligent inventory audit.
     Falls back to rule-based checks if Gemini is unavailable.
     """
-    # client = _get_gemini_client()
+    client = _get_gemini_client()
     if not client:
         logger.info("Gemini unavailable, using rule-based fallback for audit")
         return _rule_based_audit(items)
