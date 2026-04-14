@@ -7,7 +7,7 @@ import type {
   CreateUserPayload,
 } from '@/types'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('auth_token')
