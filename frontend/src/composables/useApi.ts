@@ -25,6 +25,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   })
 
+  // Global 401 handler — token expired or invalid → force re-login
+  if (response.status === 401) {
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('auth_user')
+    window.location.href = '/login'
+    throw new Error('Session expired. Please log in again.')
+  }
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }))
     throw new Error(error.detail || `HTTP ${response.status}`)
