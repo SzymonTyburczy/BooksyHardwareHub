@@ -129,9 +129,108 @@ The provided wireframes were used as a **functional reference**, not a visual te
 
 | Tool | Usage |
 |------|-------|
-| **Gemini (Antigravity)** | Primary AI pair programmer — architecture design, API implementation, test generation, debugging |
-| **Gemini 2.5 Flash API** | Integrated into the app for semantic search and inventory auditing |
-| **VS Code** | IDE with Vue/Python extensions |
+| **Gemini (Antigravity)** | Primary AI pair programmer — architecture design, API contract analysis, implementation, test generation, deployment debugging |
+| **Gemini 2.5 Flash API** | Runtime AI layer integrated into the app — semantic search and inventory auditing |
+| **VS Code** | IDE with Pylance, Vue Language Features, and ESLint extensions |
+
+### How AI Was Used (vs. Where I Overrode It)
+
+The goal was to use AI to move fast — not to blindly accept every suggestion. Here's the breakdown:
+
+| Decision | AI suggestion | My override | Why |
+|----------|--------------|-------------|-----|
+| **Database choice** | PostgreSQL | Kept SQLite | Portability for reviewer — no DB server required to run locally |
+| **Test isolation** | `:memory:` SQLite | `tempfile.NamedTemporaryFile` | `:memory:` fails with multi-connection SQLite — AI missed this |
+| **JWT library** | `python-jose` | `PyJWT` | Simpler, actively maintained, no known CVEs at time of writing |
+| **Gemini model** | `gemini-2.0-flash` | `gemini-2.5-flash` | Free tier quota exhausted during dev — diagnosed from 429 error logs |
+| **Keyword fallback** | ~8 term mappings | 40+ mappings | Initial coverage too narrow — "communicate", "small", "compact" returned empty results |
+| **Business logic guards** | Frontend-only validation | Enforced in backend too | Frontend guards are UX — backend guards are security. Both required |
+| **CORS policy** | `*` wildcard | Specific domains + Vercel regex | Wildcard is insecure even for internal tools |
+
+### Prompt Trail
+
+Key prompts that shaped the architecture (paraphrased from the actual Antigravity/Gemini session):
+
+**Phase 1 — Database Schema (Manual, before AI)**
+
+I wrote `sqlite_db.py` myself first — defining the relational schema, foreign key constraints, status enums, triggers, and connection management before any AI was involved. This gave me full control over the data model as the foundation.
+
+---
+
+**Phase 2 — Frontend Analysis & API Contract Mapping**
+> *"Analyze this Vue 3 frontend codebase. Map every API call in useApi.ts, every store action, and every component. Tell me exactly what backend contract needs to exist to make this frontend work without changing a single line of frontend code."*
+
+Outcome: AI produced a complete API contract map — 14 endpoints with exact paths, HTTP methods, request bodies, and expected response shapes. This became the implementation spec for the backend.
+
+---
+
+**Phase 3 — Backend Implementation**
+> *"Build a FastAPI backend that exactly matches this API contract. Use the existing sqlite_db.py schema. Add bcrypt password hashing, JWT auth, rental business logic guards, and seed from this JSON."*
+
+Outcome: Full `main.py` in one session (~350 lines). I reviewed every endpoint against `useApi.ts` manually and found 2 field name mismatches — corrected before moving on.
+
+**Key decision made during this phase:** Business logic guards (cannot rent Repair/In Use/Unknown) were placed **in the backend**, not just the frontend. AI initially suggested frontend-only checks — I pushed back and required server-side enforcement so API consumers cannot bypass them with direct HTTP calls.
+
+---
+
+**Phase 4 — Test Generation**
+> *"Write at least 21 pytest tests for the 3 most critical business rules: authentication, rental guards (cannot rent Repair/In Use/Unknown), and admin-only operations."*
+
+Outcome: 21 tests generated. Initial implementation had a critical DB isolation bug — see **The Correction** below.
+
+Follow-up prompt after the bug was discovered:
+> *"All tests fail with 'no such table: users'. DB is initialized in conftest but tables don't exist when tests run. Why does this happen and how do I fix it?"*
+
+AI correctly diagnosed the `:memory:` multi-connection issue and proposed the `tempfile` fix.
+
+---
+
+**Phase 5 — AI Integration**
+> *"Integrate Gemini 2.5 Flash into the backend. Implement semantic_search() that interprets natural language hardware queries and returns matching hardware IDs as a JSON array. Implement inventory_audit() that analyzes the inventory and returns structured flags with severity levels. Add keyword-based and rule-based fallbacks for when the API is unavailable."*
+
+Outcome: `ai_service.py` with lazy client initialization, structured prompts, JSON response parsing with markdown block stripping, and graceful degradation. The prompt engineering was iterative:
+
+- **First attempt:** Gemini returned verbose text explanations instead of JSON → added `"Respond with ONLY a JSON array, no explanation"` to the prompt
+- **Audit output:** Initially returned inconsistent severity strings → added explicit enum constraint: `"severity": "high" | "medium" | "low"`
+- **Few-shot examples:** Added inline examples in the system prompt to anchor output format consistently
+
+---
+
+**Phase 6 — Deployment Fixes**
+> *"Frontend on Vercel gets 'failed to fetch' for all API calls. Backend on Railway returns 502. Debug both issues step by step."*
+
+Outcome: Identified 3 separate root causes through systematic elimination:
+1. **Wrong env var** — `VITE_API_URL` vs `VITE_API_BASE_URL` in Vercel dashboard
+2. **CORS rejection** — Backend had hardcoded wrong Vercel subdomain from an earlier test deploy → fixed with `*.vercel.app` regex allow-list
+3. **Railway silent crash** — Start command was `uvicorn main:app` without `cd backend` first → import error → 502 → fixed in `nixpacks.toml`
+
+---
+
+**Phase 7 — Production Hardening (Post-Deploy)**
+> *"Run a full end-to-end test against the live Railway API. Verify every endpoint returns the expected HTTP status codes. Find anything that doesn't match."*
+
+Outcome: Discovered inventory audit 500 bug (Correction #2 below) and identified Gemini quota exhaustion on `gemini-2.0-flash`. Expanded keyword fallback coverage after testing edge-case natural language queries.
+
+
+
+
+
+### AI Model Selection & Quota Management
+
+During development, the Gemini free-tier quota for `gemini-2.0-flash` was fully exhausted from repeated testing. Diagnosed from the error response:
+
+```
+429 RESOURCE_EXHAUSTED
+Quota exceeded for: generate_content_free_tier_requests
+limit: 0 — model: gemini-2.0-flash
+Retry after: 40s
+```
+
+**Resolution steps:**
+1. Called `client.models.list()` to enumerate all available models
+2. Selected `gemini-2.5-flash` — stable release, separate quota bucket, confirmed in available model list
+3. Verified with a live test query before pushing to production
+4. Defined a single `GEMINI_MODEL` constant so future model switches require changing exactly one line
 
 ### Data Strategy
 
@@ -146,35 +245,6 @@ The provided seed dataset contained **intentional traps** to test data auditing 
 | **Empty brand** (id:10) | Detected during schema validation | Set to "Unknown" — Auditor flags it for identification |
 | **null purchaseDate** (id:10) | Database schema allows NULL | Handled gracefully in UI (shows "—") |
 | **Safety notes** (battery swelling, liquid damage) | AI Auditor detects at runtime | Flagged as high/medium severity in audit results |
-
-### Prompt Trail
-
-Key prompts that shaped the architecture (paraphrased from the actual Antigravity/Gemini session):
-
-**Phase 1 — Gap Analysis**
-> *"You are reviewing a recruitment task for an AI-native hardware management tool. I have a Vue 3 frontend with mock data and no backend. Analyze the requirements and tell me exactly what's missing to make it production-ready."*
-
-Outcome: AI identified 4 critical blockers — no backend, no auth, mock data only, no AI layer. Produced a prioritized implementation plan.
-
-**Phase 2 — Backend Architecture**
-> *"Build a FastAPI backend that exactly matches this frontend API contract. Use SQLite with bcrypt password hashing. Seed from this JSON. Implement JWT auth, hardware CRUD, rental business logic guards, and mock AI endpoints."*
-
-Outcome: Full `main.py` + `sqlite_db.py` in one session. I reviewed every endpoint against the frontend contract manually.
-
-**Phase 3 — Test Generation**
-> *"Write at least 21 pytest tests for the 3 most critical business rules: authentication, rental guards (cannot rent Repair/In Use/Unknown), and admin-only operations."*
-
-Outcome: 21 tests generated. Initial implementation had a critical DB isolation bug — see **The Correction** below.
-
-**Phase 4 — AI Integration**
-> *"Integrate Gemini 2.5 Flash into the backend. Implement semantic_search() that interprets natural language hardware queries, and inventory_audit() that flags safety issues, data anomalies, and operational problems. Add keyword-based fallback for when the API key is missing."*
-
-Outcome: `ai_service.py` with lazy initialization, structured prompts, JSON response parsing, and graceful degradation.
-
-**Phase 5 — Deployment Fixes**
-> *"Frontend on Vercel gets 'failed to fetch'. Backend on Railway returns 502. Debug the issue."*
-
-Outcome: Identified 3 separate issues — wrong env var name (`VITE_API_URL` vs `VITE_API_BASE_URL`), CORS misconfiguration with hardcoded wrong domain, and Railway start command crashing silently. Fixed all three iteratively.
 
 ### The "Correction" ⚠️
 
