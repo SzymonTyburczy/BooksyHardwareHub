@@ -215,6 +215,91 @@ Outcome: Discovered inventory audit 500 bug (Correction #2 below) and identified
 
 
 
+### Iterative AI Dialogue (selected micro-iterations)
+
+Beyond the strategic phases above, the project involved dozens of smaller prompt-response-correction cycles. Five representative examples, each traceable to specific code in the repository:
+
+---
+
+**Micro-iteration A — Database schema: normalized history table**
+
+Initial instinct was to store status change notes as a plain `TEXT` field on the `hardware` table. During schema design:
+
+> *"I need to track who changed hardware status and when, for audit purposes. Is a text log field sufficient or should I normalize this?"*
+
+AI recommended a dedicated `hardware_history` table with foreign keys to both `hardware` and `users`. Result in `sqlite_db.py` lines 38-48:
+
+```sql
+CREATE TABLE hardware_history (
+  hardware_id INTEGER NOT NULL,
+  old_status TEXT, new_status TEXT,
+  changed_by INTEGER,
+  changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (hardware_id) REFERENCES hardware(id) ON DELETE CASCADE,
+  FOREIGN KEY (changed_by) REFERENCES users(id)
+);
+```
+
+Added indexes on `hardware_id` and `changed_by` (lines 66-67). This is the foundation for a future rental history dashboard — data is already being captured.
+
+---
+
+**Micro-iteration B — Semantic search returning prose instead of JSON**
+
+First call to `semantic_search()` returned a paragraph of text instead of a usable array:
+
+> *"The model ignores my JSON instruction and returns a long explanation. How do I force structured output?"*
+
+Added explicit constraints to the prompt in `ai_service.py`:
+- `"Respond with ONLY a JSON array of matching item IDs, e.g. [1, 4, 9]."`
+- `"If nothing matches, respond with []."`
+- `"Do NOT include any explanation, just the JSON array."`
+
+Also added markdown stripping because Gemini occasionally wraps JSON in triple-backtick code blocks.
+
+---
+
+**Micro-iteration C — Keyword fallback too narrow for natural language**
+
+During quota testing, query `"give me something small to communicate"` returned `[]`.
+
+> *"Why does keyword fallback return nothing for 'communicate'? There are phones in the inventory."*
+
+Root cause: `KEYWORD_MAP` only had direct hardware terms. Extended with semantic clusters in `ai_service.py`:
+
+```python
+"communicate": ["iphone", "galaxy", "samsung", "sony"],
+"small":       ["iphone", "galaxy", "samsung"],
+"call":        ["iphone", "galaxy", "samsung"],
+```
+
+Map grew from ~8 entries to 40+ covering communication, size, use-case, and brand synonyms.
+
+---
+
+**Micro-iteration D — HTTP 401 vs 403 semantics**
+
+> *"When a logged-in regular user hits an admin-only endpoint, should I return 401 or 403?"*
+
+AI clarified: **401** = "I don't know who you are" (no/invalid token). **403** = "I know who you are, you just don't have permission." Admin-only endpoints now return 403 for authenticated non-admins, 401 for missing/invalid tokens — enforced through the `get_admin_user` dependency in `main.py`.
+
+---
+
+**Micro-iteration E — UNIQUE index for active rentals at database level**
+
+> *"How do I prevent the same hardware from being rented twice at the DB level, not just application level?"*
+
+AI suggested a **partial UNIQUE index** — unique only for rows where `return_date IS NULL`. Result in `sqlite_db.py` lines 60-62:
+
+```sql
+CREATE UNIQUE INDEX idx_rentals_active
+ON rentals(hardware_id) WHERE return_date IS NULL;
+```
+
+The database itself enforces "one active rental per device", independent of application logic. Belt-and-suspenders alongside the status guard in `main.py`.
+
+---
+
 ### AI Model Selection & Quota Management
 
 During development, the Gemini free-tier quota for `gemini-2.0-flash` was fully exhausted from repeated testing. Diagnosed from the error response:
