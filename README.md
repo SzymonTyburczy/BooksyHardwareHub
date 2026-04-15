@@ -162,9 +162,9 @@ Outcome: AI identified 4 critical blockers — no backend, no auth, mock data on
 Outcome: Full `main.py` + `sqlite_db.py` in one session. I reviewed every endpoint against the frontend contract manually.
 
 **Phase 3 — Test Generation**
-> *"Write at least 21 pytest tests for the 3 most critical business rules: authentication, rental guards (cannot rent Repair/In Use/Unknown), and admin-only operations. Use a temp file SQLite DB, not :memory:."*
+> *"Write at least 21 pytest tests for the 3 most critical business rules: authentication, rental guards (cannot rent Repair/In Use/Unknown), and admin-only operations."*
 
-Outcome: 21 tests. First AI attempt used `:memory:` — see **The Correction** below.
+Outcome: 21 tests generated. Initial implementation had a critical DB isolation bug — see **The Correction** below.
 
 **Phase 4 — AI Integration**
 > *"Integrate Gemini 2.5 Flash into the backend. Implement semantic_search() that interprets natural language hardware queries, and inventory_audit() that flags safety issues, data anomalies, and operational problems. Add keyword-based fallback for when the API key is missing."*
@@ -178,6 +178,8 @@ Outcome: Identified 3 separate issues — wrong env var name (`VITE_API_URL` vs 
 
 ### The "Correction" ⚠️
 
+**Correction #1 — Test Database Isolation Bug**
+
 **Problem:** When writing tests, AI initially used `os.environ["HARDWARE_HUB_DB_PATH"] = ":memory:"` for an in-memory SQLite database. This caused **all 21 tests to fail** with `sqlite3.OperationalError: no such table: users`.
 
 **Root cause I identified:** SQLite's `:memory:` database creates a **separate database for each connection**. The test fixture called `initialize_database()` (which creates tables in connection #1), then tried to insert seed data (in connection #2) — which had an empty, table-less database.
@@ -185,6 +187,20 @@ Outcome: Identified 3 separate issues — wrong env var name (`VITE_API_URL` vs 
 **How I fixed it:** Replaced `:memory:` with a `tempfile.NamedTemporaryFile` that persists on disk during the test, ensuring all connections access the same database. Added teardown logic to delete the temp file after each test. This is a SQLite-specific gotcha that the AI missed because it assumed connection pooling behavior similar to PostgreSQL.
 
 **Lesson:** AI tools are excellent at generating boilerplate and test structures, but understanding database connection semantics requires domain knowledge. Always verify AI-generated infrastructure code against the actual runtime behavior.
+
+---
+
+**Correction #2 — Live Production Bug: Inventory Audit 500**
+
+**Problem:** After deployment, the `/api/ai/audit` endpoint returned `500 Internal Server Error` on production, while all 21 unit tests were passing locally.
+
+**Root cause I identified:** During an editing session on `ai_service.py`, the line `client = _get_gemini_client()` inside `inventory_audit()` was accidentally commented out. The function then reached `if not client:` and raised `NameError: name 'client' is not defined`. The unit test for audit (`test_audit_returns_flags`) passed locally because the test environment triggered the keyword fallback path before reaching the broken line.
+
+**How I found it:** Ran a manual end-to-end test against the live Railway API after deployment — which exposed the 500 that unit tests didn't catch because they exercise a different code path.
+
+**How I fixed it:** Uncommented the line, re-ran all 21 tests locally (still passing), pushed, Railway redeployed, confirmed 200 from production.
+
+**Lesson:** Unit tests verify business logic, but integration tests against the live environment catch a different category of bugs — especially subtle code editing mistakes in functions that have multiple early-exit paths.
 
 ---
 
